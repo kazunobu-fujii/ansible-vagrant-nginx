@@ -1,0 +1,36 @@
+---
+- hosts: all
+  sudo: yes
+  vars:
+    proxy_pass: http://192.168.33.1:3000
+    ssl_certificate_path: /etc/nginx/ssl
+    ssl_certificate: "{{ ssl_certificate_path }}/server.crt"
+    ssl_certificate_key: "{{ ssl_certificate_path }}/server.key"
+  tasks:
+    - name: update apt cache
+      apt: >
+        update_cache=yes
+
+    - name: be sure nginx is installed
+      apt: pkg=nginx state=installed
+
+    - name: be sure openssl is installed
+      apt: pkg=openssl state=installed
+
+    - name: prepare own ssl directory
+      file: dest="{{ ssl_certificate_path }}" state=directory mode=0755 owner=root group=root
+
+    - name: create self-signed SSL cert
+      command: openssl req -new -nodes -x509 -subj "/C=JP/O=local/CN={{ ansible_eth1.ipv4.address }}" -days 3650 -keyout "{{ ssl_certificate_key }}" -out "{{ ssl_certificate }}"  -extensions v3_ca creates="{{ ssl_certificate }}"
+      notify:
+      - restart nginx
+
+    - name: create nginx configuration
+      template: src=default.j2 dest=/etc/nginx/sites-available/default mode=0644 owner=root group=root
+      notify:
+      - restart nginx
+
+  handlers:
+    - name: restart nginx
+      service: name=nginx state=restarted
+
